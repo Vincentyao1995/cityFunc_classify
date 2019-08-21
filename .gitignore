@@ -4,3 +4,5 @@
 /dataset
 *.tif
 *.png
+/feature_extractor_vgg16SPP/*.npy
+/feature_extractor_vgg16SPP/__pychache__/
