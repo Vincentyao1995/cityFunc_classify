@@ -1,0 +1,6 @@
+/tmp
+/result_analysis
+/__pycache__
+/dataset
+*.tif
+*.png
