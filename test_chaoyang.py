@@ -331,7 +331,7 @@ class classifyChaoyang():
         # 学习率，迭代次数，batch大小
         learning_rate = 0.001
         training_epochs = 500
-        batch_size = 16
+        batch_size = 8
         display_step = 1
 
         # 网络参数
@@ -343,8 +343,6 @@ class classifyChaoyang():
         # tf 图的输入
         x = tf.placeholder("float", [None, n_input])
         y = tf.placeholder("float", [None, n_classes])
-
-
 
         # 权重、偏置参数
         weights = {
@@ -368,6 +366,8 @@ class classifyChaoyang():
 
         # 初始化变量
         init = tf.global_variables_initializer()
+        saver = tf.train.Saver(tf.global_variables())
+
 
         with tf.Session() as sess:
             sess.run(init)
@@ -400,12 +400,68 @@ class classifyChaoyang():
                     print("******Testing Accuracy:*******", accuracy.eval({x: test_x, y: test_y}))
 
             print("Optimization Finished!")
+            saver.save(sess, './MLPmodel.ckpt', global_step=epoch)
             #
             # # Test model
             # correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
             # # Calculate accuracy
             # accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
             # print("******Testing Accuracy:*******", accuracy.eval({x: test_x, y: test_y}))
+
+    def nn_classify_ssFeas(self, ssFea_path, model_path):
+        # 创建多层感知机模型
+        def multilayer_perceptron(x, weights, biases):
+            # Hidden layer with RELU activation
+            layer_1 = tf.add(tf.matmul(x, weights['h1']), biases['b1'])
+            layer_1 = tf.nn.relu(layer_1)
+            # Hidden layer with RELU activation
+            layer_2 = tf.add(tf.matmul(layer_1, weights['h2']), biases['b2'])
+            layer_2 = tf.nn.relu(layer_2)
+            # Output layer with linear activation
+            out_layer = tf.matmul(layer_2, weights['out']) + biases['out']
+            return out_layer
+
+        to_predict_features = np.load(ssFea_path)
+
+
+        n_hidden_1 = 256  # 第一层的特征数（神经元数）
+        n_hidden_2 = 256  # 2nd layer number of features
+        n_input = 13  # 输入训练x的维度
+        n_classes = 6  # 输出类别数目
+
+        # tf 图的输入
+        x = tf.placeholder("float", [None, n_input])
+        y = tf.placeholder("float", [None, n_classes])
+
+        # 权重、偏置参数
+        weights = {
+            'h1': tf.Variable(tf.random_normal([n_input, n_hidden_1])),
+            'h2': tf.Variable(tf.random_normal([n_hidden_1, n_hidden_2])),
+            'out': tf.Variable(tf.random_normal([n_hidden_2, n_classes]))
+        }
+        biases = {
+            'b1': tf.Variable(tf.random_normal([n_hidden_1])),
+            'b2': tf.Variable(tf.random_normal([n_hidden_2])),
+            'out': tf.Variable(tf.random_normal([n_classes]))
+        }
+
+        # 创建模型
+        pred = multilayer_perceptron(x, weights, biases)
+        # relu_pred = tf.nn.relu(pred[:-1])
+        pred = tf.multiply(pred, tf.constant(0.001,dtype=tf.float32))
+        prob = tf.nn.softmax(pred, 1)
+
+
+        with tf.Session() as sess:
+            # restore Graph
+            # restore paras
+            saver = tf.train.Saver()
+            saver.restore(sess, model_path)
+            print('loading model successfully! %s' % model_path)
+
+            pred_logits = sess.run(pred, feed_dict={x: to_predict_features})
+            prob_res = sess.run(prob, feed_dict={x: to_predict_features})
+            print(prob_res)
 
 
     def color_annotation(self, label_path, output_path):
@@ -451,7 +507,10 @@ if __name__ == '__main__':
 
     nn_ss_train_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/ss_img_feas.npy'
     nn_ss_label_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/hd_clip_parcel_type.txt'
+    nn_model_path = './MLPmodel.ckpt-499'
 
     #to_classify_chaoyang.convert_tif2jpg(input_filepath, output_filepath)
     #to_classify_chaoyang.process_name_class(subRegion_path, subRegion_spp_path, output_filepath)
-    to_classify_chaoyang.nn_train_ssFeas(nn_ss_train_feaPath, nn_ss_label_feaPath)
+
+    #to_classify_chaoyang.nn_train_ssFeas(nn_ss_train_feaPath, nn_ss_label_feaPath)
+    to_classify_chaoyang.nn_classify_ssFeas(ssFea_path, nn_model_path)
