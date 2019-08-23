@@ -363,44 +363,53 @@ class classifyChaoyang():
         # 定义 loss 和 optimizer
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+        tf.summary.scalar("cost", cost)
+        summary_op = tf.summary.merge_all()             # 将图形、训练过程等数据合并在一起
 
-        # 初始化变量
-        init = tf.global_variables_initializer()
-        saver = tf.train.Saver(tf.global_variables())
 
 
         with tf.Session() as sess:
+
+            # 初始化变量
+            init = tf.global_variables_initializer()
+            saver = tf.train.Saver(tf.global_variables())
+
             sess.run(init)
+            writer = tf.summary.FileWriter('/MLP_logs', sess.graph)  # 将训练日志写入到logs文件夹下
 
             # 迭代次数
             for epoch in range(training_epochs):
                 avg_cost = 0.
                 total_batch = int(len(to_predict_features) / batch_size)
+
+                batch_x, batch_y = get_batch(train_x, train_y, batch_size)
                 # Loop over all batches
                 for i in range(total_batch):
-                    batch_x, batch_y = get_batch(train_x, train_y, batch_size)
                     # Run optimization op (backprop) and cost op (to get loss value)
                     _, c, prob_res,pred_res = sess.run([optimizer, cost, prob, pred], feed_dict={x: batch_x, y: batch_y})
                     # 计算平均误差
                     avg_cost += c / total_batch
-                # Display logs per epoch step
-                if epoch % display_step == 0:
-                    print("Epoch:", '%04d' % (epoch + 1), "cost=", \
-                          "{:.9f}".format(avg_cost))
-                    # Test model
-                    correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-                    # Calculate accuracy
-                    accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-                    print("Training Accuracy:", accuracy.eval({x: train_x, y: train_y}), '\n')
-                if epoch % 50 == 0:
-                    # Test model
-                    correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-                    # Calculate accuracy
-                    accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-                    print("******Testing Accuracy:*******", accuracy.eval({x: test_x, y: test_y}))
+                    # Display logs per epoch step
+                    if epoch % display_step == 0:
+                        print("Epoch:", '%04d' % (epoch + 1), "cost=", \
+                              "{:.9f}".format(avg_cost))
+                        # Test model
+                        correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+                        # Calculate accuracy
+                        accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+                        print("Training Accuracy:", accuracy.eval({x: train_x, y: train_y}), '\n')
+                    if epoch % 50 == 0:
+                        # Test model
+                        correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+                        # Calculate accuracy
+                        accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+                        print("******Testing Accuracy:*******", accuracy.eval({x: test_x, y: test_y}))
+
+                        summary_str = sess.run(summary_op, feed_dict={x: batch_x, y: batch_y})
+                        writer.add_summary(summary_str, epoch)  # 将日志数据写入文件
 
             print("Optimization Finished!")
-            saver.save(sess, './MLPmodel.ckpt', global_step=epoch)
+            saver.save(sess, './MLP_log_model.ckpt', global_step=epoch)
             #
             # # Test model
             # correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
