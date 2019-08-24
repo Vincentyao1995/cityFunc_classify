@@ -35,13 +35,13 @@ Optimization Finished!
 Testing Accuracy: 0.45794392
 
 batch 16, epoch 15
-256,256
+hidden: 128,256
 
 after:
+batch 16, epoch 500(total batch for one epoch)
+hidden: 256,256
 
-
-
-
+****result see acc.ods(or tensorboard to visualize it.)
 
 
 Question1:pred are super large so that softmax has no response.
@@ -148,3 +148,11 @@ probs:
 20 = {ndarray} [0.29692492 0.02001785 0.3251023  0.10678567 0.02642683 0.22474247]
 21 = {ndarray} [1.2044413e-03 9.6673211e-05 9.8149073e-01 2.3549991e-03 8.3839084e-05\n 1.4769288e-02]
 22 = {ndarray} [0.16639666 0.16635717 0.16697875 0.16671816 0.16677013 0.16677912]
+
+
+prob tests in chaoyang.
+
+
+
+
+

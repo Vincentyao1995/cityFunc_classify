@@ -331,7 +331,7 @@ class classifyChaoyang():
         # 学习率，迭代次数，batch大小
         learning_rate = 0.001
         training_epochs = 500
-        batch_size = 8
+        batch_size = 16
         display_step = 1
 
         # 网络参数
@@ -362,60 +362,70 @@ class classifyChaoyang():
 
         # 定义 loss 和 optimizer
         cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=pred, labels=y))
+
+        pre_correct = tf.equal(tf.argmax(y, 1), tf.argmax(pred, 1))
+        accuracy = tf.reduce_mean(tf.cast(pre_correct, tf.float32))
+
         optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+
         tf.summary.scalar("cost", cost)
-        summary_op = tf.summary.merge_all()             # 将图形、训练过程等数据合并在一起
+        tf.summary.scalar('acc', accuracy)
+
+        summary_op = tf.summary.merge_all()
+        init = tf.global_variables_initializer()
 
 
 
         with tf.Session() as sess:
 
             # 初始化变量
-            init = tf.global_variables_initializer()
+
             saver = tf.train.Saver(tf.global_variables())
 
             sess.run(init)
-            writer = tf.summary.FileWriter('/MLP_logs', sess.graph)  # 将训练日志写入到logs文件夹下
+            writer = tf.summary.FileWriter('./MLP_logs', sess.graph)  # 将训练日志写入到logs文件夹下
 
             # 迭代次数
             for epoch in range(training_epochs):
                 avg_cost = 0.
                 total_batch = int(len(to_predict_features) / batch_size)
 
-                batch_x, batch_y = get_batch(train_x, train_y, batch_size)
+                batch_x, batch_y = '', ''
                 # Loop over all batches
                 for i in range(total_batch):
                     # Run optimization op (backprop) and cost op (to get loss value)
-                    _, c, prob_res,pred_res = sess.run([optimizer, cost, prob, pred], feed_dict={x: batch_x, y: batch_y})
+                    batch_x, batch_y = get_batch(train_x, train_y, batch_size)
+                    #_, c, prob_res,pred_res, summary_str = sess.run([optimizer, cost, prob, pred, summary_op], feed_dict={x: batch_x, y: batch_y})
+                    _, c, prob_res, pred_res = sess.run([optimizer, cost, prob, pred],feed_dict={x: batch_x, y: batch_y})
                     # 计算平均误差
                     avg_cost += c / total_batch
                     # Display logs per epoch step
-                    if epoch % display_step == 0:
-                        print("Epoch:", '%04d' % (epoch + 1), "cost=", \
-                              "{:.9f}".format(avg_cost))
-                        # Test model
-                        correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-                        # Calculate accuracy
-                        accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-                        print("Training Accuracy:", accuracy.eval({x: train_x, y: train_y}), '\n')
-                    if epoch % 50 == 0:
-                        # Test model
-                        correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-                        # Calculate accuracy
-                        accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-                        print("******Testing Accuracy:*******", accuracy.eval({x: test_x, y: test_y}))
+                    #writer.add_summary(summary_str, (epoch-1)*total_batch + i)  # 将日志数据写入文件
 
-                        summary_str = sess.run(summary_op, feed_dict={x: batch_x, y: batch_y})
-                        writer.add_summary(summary_str, epoch)  # 将日志数据写入文件
+                if epoch % display_step == 0:
+                    print("Epoch:", '%04d' % (epoch + 1), "cost=", \
+                          "{:.9f}".format(avg_cost))
+                    # Test model
+                    correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+                    # Calculate accuracy
+                    accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+                    print("Training Accuracy:", accuracy.eval({x: train_x, y: train_y}), '\n')
+
+                    summary_str = sess.run(summary_op, feed_dict={x: batch_x, y: batch_y})
+                    writer.add_summary(summary_str, epoch)  # 将日志数据写入文件
+
+                if epoch % 50 == 0:
+                    # Test model
+                    correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
+                    # Calculate accuracy
+                    accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
+                    print("******Testing Accuracy:*******", accuracy.eval({x: test_x, y: test_y}))
+
+                    # summary_str = sess.run(summary_op, feed_dict={x: batch_x, y: batch_y})
 
             print("Optimization Finished!")
             saver.save(sess, './MLP_log_model.ckpt', global_step=epoch)
-            #
-            # # Test model
-            # correct_prediction = tf.equal(tf.argmax(pred, 1), tf.argmax(y, 1))
-            # # Calculate accuracy
-            # accuracy = tf.reduce_mean(tf.cast(correct_prediction, "float"))
-            # print("******Testing Accuracy:*******", accuracy.eval({x: test_x, y: test_y}))
+
 
     def nn_classify_ssFeas(self, ssFea_path, model_path):
         # 创建多层感知机模型
@@ -460,6 +470,23 @@ class classifyChaoyang():
         pred = tf.multiply(pred, tf.constant(0.001,dtype=tf.float32))
         prob = tf.nn.softmax(pred, 1)
 
+        res_path = r'./test_nn_res.txt'
+        file = open(res_path, 'w')
+
+        file_ref_path = r'./trained_MLP_model/saved_model_res/test_res_chaoyang/chaoyang_label.txt'
+        file_ref = open(file_ref_path, 'r')
+        refs = file_ref.readlines()
+
+        file.write('label--index--EDU,TRA,GRE,COM,OTH,RES\n')
+
+        parcel_class2label = {
+            6:'RES',
+            1:'EDU',
+            2:'TRA',
+            3:'GRE',
+            4:'COM',
+            5:'OTH',
+        }
 
         with tf.Session() as sess:
             # restore Graph
@@ -470,7 +497,24 @@ class classifyChaoyang():
 
             pred_logits = sess.run(pred, feed_dict={x: to_predict_features})
             prob_res = sess.run(prob, feed_dict={x: to_predict_features})
-            print(prob_res)
+
+            for i, prob in enumerate(prob_res[:-1]):
+                prob = list(prob)
+                prob_tmp = list(prob.copy())
+                max_first = max(prob_tmp)
+                prob_tmp.remove(max_first)
+                max_second = max(prob_tmp)
+                prob_tmp.remove(max_second)
+                max_third = max(prob_tmp)
+                top_list = []
+                top_list.append((parcel_class2label[prob.index(max_first)+1], max_first))
+                top_list.append((parcel_class2label[prob.index(max_second)+1], max_second))
+                top_list.append((parcel_class2label[prob.index(max_third)+1], max_third))
+
+                file.write(refs[i].strip('\n') + '--------' + str(top_list) + '\n')
+            print('file output at %s' % res_path)
+            file.close()
+            file_ref.close()
 
 
     def color_annotation(self, label_path, output_path):
@@ -516,7 +560,7 @@ if __name__ == '__main__':
 
     nn_ss_train_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/ss_img_feas.npy'
     nn_ss_label_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/hd_clip_parcel_type.txt'
-    nn_model_path = './MLPmodel.ckpt-499'
+    nn_model_path = './trained_MLP_model/saved_model_res/MLP_log_model.ckpt-499'
 
     #to_classify_chaoyang.convert_tif2jpg(input_filepath, output_filepath)
     #to_classify_chaoyang.process_name_class(subRegion_path, subRegion_spp_path, output_filepath)

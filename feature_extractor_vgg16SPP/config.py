@@ -10,7 +10,7 @@ cityFunc_imgW = 256
 cityFunc_imgH = 256
 cityFunc_nClasses = 6
 cityFunc_data_path = r'../dataset/cityFuncDataset'
-cityFunc_data_path = r'../dataset/chaoyang'
+#cityFunc_data_path = r'../dataset/chaoyang'
 
 
 cityFunc_class = ['RES',
