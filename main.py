@@ -69,7 +69,7 @@ if __name__ == '__main__':
 
     #get street block img features
 
-    img_features1 = np.load(r'./dataset/parcel_imgFea_thu.npy')
+    img_features1 = np.load(r'./dataset/ss_img_feas.npy')
     #img_features1 = norm_feature(img_features1)
     # img_features = np.load(r'./dataset/parcel_imgFea_CFSplit32B_logits.npy')
     # img_features = norm_feature(img_features)

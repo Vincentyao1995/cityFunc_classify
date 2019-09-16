@@ -8,6 +8,159 @@ from feature_extractor_vgg16SPP import config, VGG
 from sklearn.externals import joblib
 import tensorflow as tf
 
+class add_more_testData():
+    '''
+    this class API is to add more tests data from haidian_parcel_clip into chaoyang_test files.
+    '''
+    def __init__(self):
+        return
+    def main(self):
+        add_range = [i for i in range(100,141)]
+
+        path_npy_haidian = r'./dataset/ss_img_feas.npy'
+        path_npy_chaoyang = r'./dataset/chaoyang_feas_result.npy'
+        path_out = r'./dataset/chaoyang/tests_added_haidian'
+
+        fea_haidian = np.load(path_npy_haidian)
+        fea_chaoyang = np.load(path_npy_chaoyang)
+        fea_new = np.concatenate((fea_chaoyang[:-1], fea_haidian[add_range[0]:add_range[-1]]), 0)
+        np.save(os.path.join(path_out, 'fea_newTests.npy'), fea_new)
+
+
+        label_root = r'./dataset/haidian_streetblock/hd_clip_parcel_type.txt'
+
+        img_labels = open(label_root).readlines()[1:]
+        label_dict = {}
+        for label_txt in img_labels:
+            label_index = int(label_txt.split(',')[0])
+            label_dict.setdefault(label_index, label_txt.strip('\n').split(',')[-1])
+        file_newLabelTxt = open(r'./dataset/chaoyang/tests_added_haidian/chaoyang_added_label.txt','a')
+        for i in add_range:
+            i_label= label_dict[i]
+            str_to_write = 'hd_%04d.jpg-hd_%04d-{}\n'.format(i_label.lower()) % (i,i)
+            print(str_to_write)
+            file_newLabelTxt.write(str_to_write)
+        file_newLabelTxt.close()
+
+        return
+
+
+class data_augment():
+    def __init__(self, image_path):
+        self.image_path = image_path
+        #img = cv2.imread(image_path)
+        self.size = 256
+        return
+
+    # 以下函数都是一些数据增强的函数
+    def gamma_transform(self, img, gamma):
+        gamma_table = [np.power(x / 255.0, gamma) * 255.0 for x in range(self.size)]
+
+        gamma_table = np.round(np.array(gamma_table)).astype(np.uint8)
+
+        return cv2.LUT(img, gamma_table)
+
+    def random_gamma_transform(self, img, gamma_vari):
+        log_gamma_vari = np.log(gamma_vari)
+
+        alpha = np.random.uniform(-log_gamma_vari, log_gamma_vari)
+
+        gamma = np.exp(alpha)
+
+        return self.gamma_transform(img, gamma)
+
+    def rotate(self, xb, yb, angle):
+
+        rows, cols = xb.shape[0], xb.shape[1]
+
+        # cols-1 and rows-1 are the coordinate limits.
+        M = cv2.getRotationMatrix2D(((cols - 1) / 2.0, (rows - 1) / 2.0), angle, 1)
+        xb = cv2.warpAffine(xb, M, (cols, rows))
+
+        # M_rotate = cv2.getRotationMatrix2D((self.size / 2, self.size / 2), angle, 1)
+        #
+        # xb = cv2.warpAffine(xb, M_rotate, (self.size, self.size))
+        #
+        # yb = cv2.warpAffine(yb, M_rotate, (self.size, self.size))
+
+        return xb, yb
+
+    def blur(self, img):
+        img = cv2.blur(img, (3, 3))
+
+        return img
+
+    def add_noise(self, img):
+        for i in range(self.size):  # 添加点噪声
+
+            temp_x = np.random.randint(0, img.shape[0])
+
+            temp_y = np.random.randint(0, img.shape[1])
+
+            img[temp_x][temp_y] = 255
+
+        return img
+
+    def data_augment(self, xb, yb):
+        if np.random.random() < 0.25:
+            xb, yb = self.rotate(xb, yb, 90)
+
+        if np.random.random() < 0.25:
+            xb, yb = self.rotate(xb, yb, 180)
+
+        if np.random.random() < 0.25:
+            xb, yb = self.rotate(xb, yb, 270)
+
+        if np.random.random() < 0.25:
+            xb = cv2.flip(xb, 1)  # flipcode > 0：沿y轴翻转
+
+            yb = cv2.flip(yb, 1)
+
+        # if np.random.random() < 0.25:
+        #     xb = self.random_gamma_transform(xb, 1.0)
+
+        if np.random.random() < 0.25:
+            xb = self.blur(xb)
+
+        # 双边过滤
+        if np.random.random() < 0.25:
+            xb = cv2.bilateralFilter(xb, 9, 75, 75)
+
+        # 高斯滤波
+        if np.random.random() < 0.25:
+            xb = cv2.GaussianBlur(xb, (5, 5), 1.5)
+
+        if np.random.random() < 0.2:
+            xb = self.add_noise(xb)
+
+        return xb, yb
+
+    def main(self):
+        data_root = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/haidian_streetblock/hd_clip_jpg'
+        out_root = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/result_analysis/sample_distribution_exp'
+        label_root = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/haidian_streetblock/hd_clip_parcel_type.txt'
+
+        if not os.path.exists(out_root):
+            os.mkdir(out_root)
+        img_labels = open(label_root).readlines()[1:]
+        label_dict = {}
+        for label_txt in img_labels:
+            label_index = int(label_txt.split(',')[0])
+            label_dict.setdefault(label_index, label_txt.strip('\n').split(',')[-1])
+
+        for img_txt in sorted(os.listdir(data_root)):
+            str_index = img_txt.split('.')[0].split('_')[-1]
+            index = int(str_index)
+            if label_dict[index] == 'COM':
+                img_ogi = cv2.imread(os.path.join(data_root, img_txt))
+                img_d, _ = self.data_augment(img_ogi, img_ogi)
+                tmp_out_path = os.path.join(out_root, 'aug_' + img_txt)
+                cv2.imwrite(tmp_out_path, img_d)
+                print('data aug done! {}'.format(os.path.join(data_root, img_txt)))
+
+        #image = cv2.imread(self.image_path)
+
+        return
 
 class classifyChaoyang():
     def __init__(self, img_path, output_path):
@@ -22,8 +175,8 @@ class classifyChaoyang():
             This function is to test chaoyang single img classification. mainly to extract img features from single pic using vgg16+spp+softmax model, results write in .npy files, check '../dataset/haidian_streetblock/hd_clip_jpg_SPPfeature' 
 
             To change model, change: config.thu_checkpoint_path = r'../dataset/THUDataset/logs/train/model.ckpt-14999'
-
         '''
+
         dataset_choice = 'cityFunc'
         dataset = config.dataset_config[dataset_choice]
 
@@ -243,25 +396,6 @@ class classifyChaoyang():
         import numpy as np
         from sklearn.model_selection import train_test_split
 
-        # def get_labels(label_path = label_path):
-        #     parcel_class2label = {
-        #         'RES': 6,
-        #         'EDU': 1,
-        #         'TRA': 2,
-        #         'GRE': 3,
-        #         'COM': 4,
-        #         'OTH': 5,
-        #     }
-        #     label_res = []
-        #     #label_path = r'./dataset/chaoyang/imgs/train/chaoyang_label.txt'
-        #     label_file = open(label_path, 'r')
-        #     lines = label_file.readlines()
-        #     for line in lines:
-        #         clip_type = line.replace('\n', '').split('-')[-1]
-        #         clip_type = clip_type.upper()
-        #         clip_type_label = parcel_class2label[clip_type]
-        #         label_res.append(int(clip_type_label))
-        #     return label_res
         def get_labels(label_path = label_path):
             label_res = []
             label_type_num = {
@@ -324,7 +458,10 @@ class classifyChaoyang():
             return train_X, train_y, test_X, test_y
 
         label_true, _ = get_labels(label_path)
+
+        #to_predict_features = ssFea_path
         to_predict_features = np.load(ssFea_path)
+
         train_x, train_y, test_x, test_y = split_test_train(to_predict_features, label_true)
 
         # 参数
@@ -337,7 +474,7 @@ class classifyChaoyang():
         # 网络参数
         n_hidden_1 = 256  # 第一层的特征数（神经元数）
         n_hidden_2 = 256  # 2nd layer number of features
-        n_input = 13  # 输入训练x的维度
+        n_input = 19  # 输入训练x的维度
         n_classes = 6  # 输出类别数目
 
         # tf 图的输入
@@ -424,10 +561,10 @@ class classifyChaoyang():
                     # summary_str = sess.run(summary_op, feed_dict={x: batch_x, y: batch_y})
 
             print("Optimization Finished!")
-            saver.save(sess, './MLP_log_model.ckpt', global_step=epoch)
+            saver.save(sess, './MLP_log_cityFunc_model.ckpt', global_step=epoch)
 
 
-    def nn_classify_ssFeas(self, ssFea_path, model_path):
+    def nn_classify_ssFeas(self, ssFea_path, model_path, file_ref_path, res_path):
         # 创建多层感知机模型
         def multilayer_perceptron(x, weights, biases):
             # Hidden layer with RELU activation
@@ -445,7 +582,7 @@ class classifyChaoyang():
 
         n_hidden_1 = 256  # 第一层的特征数（神经元数）
         n_hidden_2 = 256  # 2nd layer number of features
-        n_input = 13  # 输入训练x的维度
+        n_input = 19  # 输入训练x的维度
         n_classes = 6  # 输出类别数目
 
         # tf 图的输入
@@ -470,10 +607,10 @@ class classifyChaoyang():
         pred = tf.multiply(pred, tf.constant(0.001,dtype=tf.float32))
         prob = tf.nn.softmax(pred, 1)
 
-        res_path = r'./test_nn_res.txt'
+
         file = open(res_path, 'w')
 
-        file_ref_path = r'./trained_MLP_model/saved_model_res/test_res_chaoyang/chaoyang_label.txt'
+
         file_ref = open(file_ref_path, 'r')
         refs = file_ref.readlines()
 
@@ -544,6 +681,159 @@ class classifyChaoyang():
         cv2.imwrite(new_img_path, new_img)
         print('saved %s' % new_img_path)
 
+class mutiFea_fusion():
+    """
+    这个类是用来fuse海淀和朝阳的test feature的，生成朝阳的cityFunc 特征，之后截取海淀的和朝阳的这个特征，生成一个新的.npy文件，成为cityFunc6特征
+    首先：mutiFea_fusion.generate_chaoyang_img_txt()，用来生成朝阳区图像的路径txt。
+    2）generate_cityFunc() 读取txt路径，并且用cityFunc模型输出朝阳对应的fea.
+    3) fuse_haidian_chaoyang()，对输出的朝阳.npy cityFunc6，融合海淀的cityFunc6特征，并且输出.npy文件保存。
+    
+    """
+
+    def __init__(self):
+        return
+    def fusion(self, *args, **kwargs):
+        feas = ''
+        for arg in args:
+            if os.path.isfile(arg):
+                fea_tmp = np.load(arg)
+                norm_fea = self.norm_feature(fea_tmp)
+                if feas == '':
+                    feas = norm_fea
+                    continue
+                else:
+                    feas = np.concatenate([feas, norm_fea],1)
+        return feas
+
+    def fuse_haidian_chaoyang(self):
+
+        add_range = [i for i in range(100, 141)]
+
+        path_npy_haidian = r'./dataset/parcel_imgFea_cityFuncLogits.npy'
+        path_npy_chaoyang = r'./dataset/chaoyang/tests_added_haidian/chaoyangFeas_cityFuncLogits.npy'
+        path_out = r'./dataset/chaoyang/tests_added_haidian/added_fea_cityFunc6.npy'
+
+        fea_haidian = np.load(path_npy_haidian)
+        fea_chaoyang = np.load(path_npy_chaoyang)
+        fea_new = np.concatenate((fea_chaoyang.squeeze(), fea_haidian[add_range[0]:add_range[-1]]), 0)
+        np.save(path_out, fea_new)
+        print('new npy feature saved: {}'.format(path_out))
+
+    def generate_chaoyang_img_txt(self):
+        root_path = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/chaoyang/imgs/train'
+        res_txt = os.path.join(root_path, 'chaoyang_imgs.txt')
+        file_txt = open(res_txt, 'w')
+        for file in sorted(os.listdir(root_path)):
+            if file.split('.')[-1] == 'jpg':
+                file_txt.write(os.path.join(root_path, file))
+                file_txt.write('\n')
+        file_txt.close()
+        print('generated txt file: {}'.format(res_txt))
+
+    def generate_cityFunc(self):
+        '''
+        输入朝阳区域的影像，使用cityFunc模型提取其fea并且保存成.npy文件；之后使用multi_fea_fusion函数，读取两个.npy文件，抽取对应的fea融合成新的.npy。
+        :return: 
+        '''
+
+        dataset_choice = 'cityFunc'
+
+        IMG_W = 256
+        IMG_H = 256
+        N_CLASSES = 6
+
+
+        RESTORE_MODEL = True
+
+        cityFunc_model_path = r'./dataset/cityFuncDataset/logs/train/cityFuncSpp8:2/model.ckpt-14999'
+        dataset_choice = 'cityFunc'
+
+        chaoyang_imgs_txt = r'./dataset/chaoyang/imgs/train/chaoyang_imgs.txt'
+        chaoyang_imgs = open(chaoyang_imgs_txt, 'r')
+        res_path = r'./dataset/chaoyang/tests_added_haidian/chaoyangFeas_cityFuncLogits.npy'
+
+        img_path = tf.placeholder(tf.string)
+        img_content = tf.read_file(img_path)
+        img = tf.image.decode_image(img_content, channels=3)
+        img2 = tf.image.resize_nearest_neighbor([img], [IMG_W, IMG_H])
+
+        x = tf.placeholder(tf.float32, shape=[None, IMG_W, IMG_H, 3])
+        y_ = tf.placeholder(tf.int16, shape=[None, N_CLASSES])
+
+        logits = VGG.VGG16N_SPP(x, N_CLASSES)
+
+        init = tf.global_variables_initializer()
+        sess = tf.Session()
+
+        sess.run(init)
+
+        # restore older checkpoints
+        if RESTORE_MODEL == True:
+            print("Reading checkpoints.../n")
+
+            model_name = cityFunc_model_path + '.meta'
+            data_name = cityFunc_model_path
+
+            # restore Graph
+            saver = tf.train.import_meta_graph(model_name)
+            # restore paras
+            saver.restore(sess, data_name)
+            print("Loading checkpoints successfully!! /n")
+
+        feas_res_chaoyang = []
+        for img in chaoyang_imgs:
+            '''这里需要遍历朝阳区的img，然后用cityFunc模型输出对应的logits.npy，之后用fusion函数合成两个.npy文件。'''
+            img = img.strip('\n')
+            img_content = sess.run(img2, feed_dict={img_path: img})
+            logits_result = sess.run(logits, feed_dict={x: img_content})
+
+            feas_res_chaoyang.append(logits_result)
+        feas_res_chaoyang = np.array(feas_res_chaoyang)
+
+        np.save(res_path, feas_res_chaoyang)
+        print('saved feas res chaoyang cityFunc6 at {}'.format(res_path))
+        sess.close()
+
+    def concate_data(feas):
+        parcel_num = feas[0].shape[0]
+        new_feature_length = 0
+        for fea in feas:
+            new_feature_length += fea.shape[1]
+
+        fea_res = np.zeros((parcel_num, new_feature_length))
+
+        # input three kinds feature
+        if len(feas) == 3:
+            fea1 = feas[0]
+            fea2 = feas[1]
+            fea3 = feas[2]
+            for parcel_index in range(parcel_num):
+                fea_res[parcel_index][0:fea1.shape[1]] = fea1[parcel_index][:]
+                fea_res[parcel_index][fea1.shape[1]:fea1.shape[1] + fea2.shape[1]] = fea2[parcel_index][:]
+                fea_res[parcel_index][fea1.shape[1] + fea2.shape[1]:] = fea3[parcel_index][:]
+
+        # input one kind feature
+        elif len(feas) == 1:
+            fea_res = feas[0]
+
+        # input two kinds feature
+        else:
+            fea1 = feas[0]
+            fea2 = feas[1]
+            for parcel_index in range(parcel_num):
+                fea_res[parcel_index][0:fea1.shape[1]] = fea1[parcel_index][:]
+                fea_res[parcel_index][fea1.shape[1]:fea1.shape[1] + fea2.shape[1]] = fea2[parcel_index][:]
+
+        return fea_res
+
+    def norm_feature(self, feas):
+        n = feas.shape[0]
+
+        for i in range(n):
+            feas[i] = (feas[i] - min(feas[i])) / (max(feas[i]) - min(feas[i]) + 0.0000001)
+        feas = np.nan_to_num(feas)
+        return feas
+
 if __name__ == '__main__':
 
     img_path = './beijing_level18_1_1_clip.tif'
@@ -557,13 +847,55 @@ if __name__ == '__main__':
 
     xgboost_model_path = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/cityFunc_singleImgFea68.52.pkl'
     ssFea_path = r'./dataset/chaoyang_feas_result.npy'
+    ssFea_added_path =r'./dataset/chaoyang/tests_added_haidian/fea_newTests.npy'
 
     nn_ss_train_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/ss_img_feas.npy'
     nn_ss_label_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/hd_clip_parcel_type.txt'
-    nn_model_path = './trained_MLP_model/saved_model_res/MLP_log_model.ckpt-499'
+    nn_model_path = r'./trained_MLP_model/saved_model_res/MLP_log_model.ckpt-499'
+    file_ref_path = r'./trained_MLP_model/saved_model_res/test_res_chaoyang/chaoyang_label.txt'
+    added_file_ref_path = r'./dataset/chaoyang/tests_added_haidian/chaoyang_added_label.txt'
+    res_path = r'./test_nn_added_chaoyang.txt'
 
     #to_classify_chaoyang.convert_tif2jpg(input_filepath, output_filepath)
     #to_classify_chaoyang.process_name_class(subRegion_path, subRegion_spp_path, output_filepath)
 
     #to_classify_chaoyang.nn_train_ssFeas(nn_ss_train_feaPath, nn_ss_label_feaPath)
-    to_classify_chaoyang.nn_classify_ssFeas(ssFea_path, nn_model_path)
+    # to_classify_chaoyang.nn_classify_ssFeas(ssFea_added_path, nn_model_path, added_file_ref_path, res_path)
+
+    #this API could do dataAugmentation operation on COM class.
+    #dataAug = data_augment('').main()
+
+
+    # add_data = add_more_testData()
+    # add_data.main()
+    """
+    这个类是用来fuse海淀和朝阳的test feature的，生成朝阳的cityFunc 特征，之后截取海淀的和朝阳的这个特征，生成一个新的.npy文件，成为cityFunc6特征
+    首先：mutiFea_fusion.generate_chaoyang_img_txt()，用来生成朝阳区图像的路径txt。
+    2）generate_cityFunc() 读取txt路径，并且用cityFunc模型输出朝阳对应的fea.
+    3) fuse_haidian_chaoyang()，对输出的朝阳.npy cityFunc6，融合海淀的cityFunc6特征，并且输出.npy文件保存。
+
+    """
+    multi_fuse = mutiFea_fusion()
+
+    # multi_fuse.generate_chaoyang_img_txt()
+    # multi_fuse.generate_cityFunc()
+    # multi_fuse.fuse_haidian_chaoyang()
+
+    addedTest_cityFunc6_fea = r'./dataset/chaoyang/tests_added_haidian/added_fea_cityFunc6.npy'
+    addedTest_ss13_fea = r'./dataset/chaoyang/tests_added_haidian/fea_newTests.npy'
+    fusion_test_cityFunc_fea19 = multi_fuse.fusion(addedTest_ss13_fea, addedTest_cityFunc6_fea)
+    fusion_test_cityFunc_fea19_path = r'./tmp/fusion_test_cityFunc_fea19.npy'
+    np.save(fusion_test_cityFunc_fea19_path, fusion_test_cityFunc_fea19)
+
+    nn_cityFunc6_train_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/parcel_imgFea_cityFuncLogits.npy'
+    nn_cityFunc6_label_feaPath = r'/home/vincent/Desktop/research/jsl_thesis/thuDateset/dataset/hd_clip_parcel_type.txt'
+    fusion_train_cityFunc_fea19 = multi_fuse.fusion(nn_ss_train_feaPath, nn_cityFunc6_train_feaPath)
+    fusion_train_cityFunc_fea19_path = './tmp/fusion_train_cityFunc_fea19.npy'
+    np.save(fusion_train_cityFunc_fea19_path, fusion_train_cityFunc_fea19)
+
+    # to_classify_chaoyang.nn_train_ssFeas(fusion_train_cityFunc_fea19_path, nn_ss_label_feaPath)
+    to_classify_chaoyang.nn_classify_ssFeas(fusion_test_cityFunc_fea19_path,
+                                            r'./trained_MLP_model/saved_model_res/MLP_log_cityFunc_model.ckpt-499',
+                                            r'./dataset/chaoyang/tests_added_haidian/chaoyang_added_label.txt',
+                                            r'./dataset/chaoyang/tests_added_haidian/fea6+13_added_test.txt'
+                                            )

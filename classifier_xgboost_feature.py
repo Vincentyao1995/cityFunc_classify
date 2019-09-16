@@ -256,4 +256,4 @@ def main(feas, norm = True):
 
 
 if __name__ is '__main__':
-    main()
+    main(None)
